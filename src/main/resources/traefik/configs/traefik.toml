@@ -1,0 +1,43 @@
+debug = true
+defaultEntryPoints = ["http", "https"]
+rootCAs = ["/etc/private/certs/localhost/rootCA.crt"]
+
+[entryPoints]
+  [entryPoints.http]
+  address = ":80"
+  [entryPoints.https]
+  address = ":443"
+    [entryPoints.https.tls]
+    [entryPoints.https.tls.defaultCertificate]
+      certFile = "/etc/private/certs/localhost/localhost.crt"
+      keyFile = "/etc/private/certs/localhost/localhost.key"
+
+[docker]
+  endpoint = "tcp://docker:2375"
+  watch = true
+  exposedByDefault = true
+  swarmMode = true
+  domain = "localhost"
+  network = "service_mesh_ingress"
+
+[api]
+  debug = true
+
+[tracing]
+  backend = "jaeger"
+  serviceName = "traefik"
+  spanNameLimit = 0
+  [tracing.jaeger]
+    samplingServerURL = "http://jaeger-agent:5778/sampling"
+    samplingType = "const"
+    samplingParam = 1.0
+    localAgentHostPort = "jaeger-agent:6831"
+    traceContextHeaderName = "x-trace-id"
+
+[metrics]
+  [metrics.influxdb]
+    address = "influxdb:8089"
+    protocol = "udp"
+    pushinterval = "10s"
+    database = "telegraf"
+    retentionpolicy = ""

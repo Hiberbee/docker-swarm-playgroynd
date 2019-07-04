@@ -1,0 +1,92 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+
+volumes:
+  elasticsearch:
+
+configs:
+  logstash_config:
+    file: ../resources/logstash/config/logstash.yml
+  logstash_pipeline:
+    file: ../resources/logstash/pipeline/logstash.conf
+  kibana_config:
+    file: ../resources/kibana/config/kibana.yml
+
+services:
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.2.0
+    networks: &default_networks
+      - service_mesh_ingress
+    ports:
+      - 9200:9200
+      - 9300:9300
+    environment:
+      discovery.type: "single-node"
+      cluster.name: "docker-cluster"
+      network.host: "0.0.0.0"
+      ES_JAVA_OPTS: "-Xmx512m -Xms512m"
+    volumes:
+      - elasticsearch:/usr/share/elasticsearch/data
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy: &default_restart_policy
+        max_attempts: 5
+        delay: '15s'
+        window: '15s'
+        condition: on-failure
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash-oss:7.2.0
+    networks: *default_networks
+    ports:
+      - 5000:5000/udp
+      - 9600:9600
+    configs:
+      - source: logstash_config
+        target: /usr/share/logstash/config/logstash.yml
+      - source: logstash_pipeline
+        target: /usr/share/logstash/pipeline/logstash.conf
+    environment:
+      LS_JAVA_OPTS: "-Xmx512m -Xms512m"
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy: *default_restart_policy
+
+  logspout:
+    image: bekt/logspout-logstash
+    networks: *default_networks
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      ROUTE_URIS: logstash://logstash:5000
+    deploy:
+      restart_policy: *default_restart_policy
+      mode: global
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:7.2.0
+    networks: *default_networks
+    configs:
+      - source: kibana_config
+        target: /usr/share/kibana/config/kibana.yml
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy: *default_restart_policy
+      labels:
+        traefik.port: 5601
+        traefik.frontend.rule: 'Host:kibana.localhost'
+

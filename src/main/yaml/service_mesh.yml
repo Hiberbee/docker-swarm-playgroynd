@@ -1,0 +1,87 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+
+configs:
+  traefik:
+    file: ../resources/traefik/configs/traefik.toml
+
+volumes:
+  consul: {}
+
+services:
+  docker:
+    image: alpine/socat
+    networks:
+      - ingress
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - tcp-listen:2375,fork,reuseaddr
+      - unix-connect:/var/run/docker.sock
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  consul:
+    image: consul:latest
+    hostname: consul
+    networks:
+      - ingress
+    ports:
+      - '8400:8400'
+      - '8500:8500'
+      - '8600:53/udp'
+    volumes:
+      - consul:/consul/data
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        delay: '30s'
+
+  registrator:
+    image: gliderlabs/registrator:latest
+    command:
+      - '-internal'
+      - 'consul://consul:8500'
+    networks:
+      - ingress
+    environment:
+      DOCKER_HOST: tcp://docker:2375
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        delay: '30s'
+
+  traefik:
+    image: traefik:v1.7.12-alpine
+    command:
+      - 'traefik'
+      - '-c'
+      - '/etc/traefik/traefik.toml'
+    configs:
+      - source: traefik
+        target: /etc/traefik/traefik.toml
+    networks:
+      - ingress
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ../resources/traefik/certs:/etc/private/certs/localhost/
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+        delay: '30s'
+      labels:
+        traefik.port: 8080
+        traefik.frontend.rule: 'Host:traefik.localhost'

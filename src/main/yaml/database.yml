@@ -1,0 +1,98 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+
+volumes:
+  cassandra:
+  mongodb:
+  neo4j:
+  postgres:
+  redis:
+
+services:
+
+  postgres:
+    image: postgres
+    networks: &default_networks
+      - service_mesh_ingress
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_DB: hiberbee
+      POSTGRES_USER: hiberbee
+      POSTGRES_PASSWORD: password
+    deploy:
+      restart_policy: &default_restart_policy
+        max_attempts: 5
+        delay: '15s'
+        window: '15s'
+        condition: on-failure
+
+  neo4j:
+    image: neo4j
+    networks: *default_networks
+    ports:
+      - 7474:7474
+      - 7687:7687
+    volumes:
+      - neo4j:/data
+    environment:
+      NEO4J_AUTH: 'neo4j/password'
+    deploy:
+      restart_policy: *default_restart_policy
+
+  redis:
+    image: redis
+    networks: *default_networks
+    ports:
+      - 6379:6379
+    volumes:
+      - redis:/data
+    deploy:
+      restart_policy: *default_restart_policy
+
+  cassandra:
+    image: cassandra
+    networks: *default_networks
+    ports:
+      - 9042:9042
+    volumes:
+      - cassandra:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(nodetool statusgossip) = running ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      restart_policy: *default_restart_policy
+
+  vault:
+    image: vault
+    networks: *default_networks
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: hiberbee
+      VAULT_LOCAL_CONFIG: '{"backend": {"file": {"path": "/vault/file"}}, "disable_mlock": true, "ui": true, "default_lease_ttl": "168h", "max_lease_ttl": "720h"}'
+    deploy:
+      restart_policy: *default_restart_policy
+      labels:
+        traefik.enable: 'true'
+        traefik.port: 8200
+        traefik.frontend.rule: 'Host:vault.localhost'
+
+  mongo:
+    image: mongo
+    networks: *default_networks
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_DATABASE: hiberbee
+      MONGO_INITDB_ROOT_USERNAME: hiberbee
+      MONGO_INITDB_ROOT_PASSWORD: password
+    volumes:
+      - mongodb:/data/db
+    deploy:
+      restart_policy: *default_restart_policy

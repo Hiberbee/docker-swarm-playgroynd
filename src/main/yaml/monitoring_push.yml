@@ -1,0 +1,82 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+
+volumes:
+  chronograf:
+  kapacitor:
+  influxdb:
+
+configs:
+  influxdb:
+    file: ../resources/influxdb/influxdb.conf
+  kapacitor:
+    file: ../resources/kapacitor/kapacitor.conf
+  telegraf:
+    file: ../resources/telegraf/telegraf.conf
+
+services:
+  chronograf:
+    image: chronograf
+    networks: &default_networks
+      - service_mesh_ingress
+    volumes:
+      - chronograf:/var/lib/chronograf
+    environment:
+      INFLUXDB_URL: http://influxdb:8086
+      KAPACITOR_URL: http://kapacitor:9092
+    deploy:
+      restart_policy: &default_restart_policy
+        max_attempts: 5
+        delay: '15s'
+        window: '15s'
+        condition: on-failure
+      labels:
+        traefik.enable: 'true'
+        traefik.port: 8888
+        traefik.frontend.rule: 'Host:chronograf.localhost'
+
+  kapacitor:
+    image: kapacitor
+    networks: *default_networks
+    volumes:
+      - kapacitor:/var/lib/kapacitor
+    configs:
+      - source: kapacitor
+        target: /etc/kapacitor/kapacitor.conf
+    environment:
+      KAPACITOR_HOSTNAME: kapacitor
+      KAPACITOR_INFLUXDB_0_URLS_0: http://influxdb:8086
+    deploy:
+      restart_policy: *default_restart_policy
+
+  telegraf:
+    image: telegraf
+    networks: *default_networks
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    configs:
+      - source: telegraf
+        target: /etc/telegraf/telegraf.conf
+    deploy:
+      restart_policy: *default_restart_policy
+
+  influxdb:
+    image: influxdb
+    networks: *default_networks
+    volumes:
+      - influxdb:/var/lib/influxdb
+    configs:
+      - source: influxdb
+        target: /etc/influxdb/influxdb.conf
+    environment:
+      INFLUXDB_ADMIN_USER: hiberbee
+      INFLUXDB_ADMIN_PASSWORD: password
+    deploy:
+      restart_policy: *default_restart_policy
+      labels:
+        traefik.enable: 'true'
+        traefik.port: 8086
+        traefik.frontend.rule: 'Host:influxdb.localhost'

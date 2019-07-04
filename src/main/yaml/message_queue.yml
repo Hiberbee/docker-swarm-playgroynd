@@ -1,0 +1,54 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+
+volumes:
+  rabbitmq: {}
+
+services:
+
+  rabbitmq:
+    image: rabbitmq:management
+    networks: &default_networks
+      - service_mesh_ingress
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
+    deploy:
+      restart_policy: &default_restart_policy
+        max_attempts: 5
+        delay: '15s'
+        window: '15s'
+        condition: on-failure
+      labels:
+        traefik.port: 15672
+        traefik.frontend.rule: 'Host:rabbitmq.localhost'
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    networks: *default_networks
+    ports:
+      - 2181:2181
+    deploy:
+      restart_policy: *default_restart_policy
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    networks: *default_networks
+    ports:
+      - 9094:9094
+    environment:
+      HOSTNAME_COMMAND: "docker info | grep ^Name: | cut -d' ' -f 2"
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://:9092,OUTSIDE://_{HOSTNAME_COMMAND}:9094
+      KAFKA_LISTENERS: INSIDE://:9092,OUTSIDE://:9094
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      restart_policy: *default_restart_policy

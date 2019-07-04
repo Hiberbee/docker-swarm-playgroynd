@@ -1,0 +1,66 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+
+
+services:
+  jaeger_collector:
+    image: jaegertracing/jaeger-collector
+    networks: &default_networks
+      - service_mesh_ingress
+    command:
+      - '--cassandra.keyspace=jaeger'
+      - '--collector.zipkin.http-port=9411'
+    ports:
+      - 14250:14250
+      - 14267:14267
+      - 14268:14268
+      - 14269:14269
+      - 9411:9411
+    deploy:
+      restart_policy: &default_restart_policy
+        max_attempts: 5
+        delay: '15s'
+        window: '15s'
+        condition: on-failure
+    environment:
+      CASSANDRA_SERVERS: cassandra:9042
+      SPAN_STORAGE_TYPE: cassandra
+
+  jaeger_query:
+    image: jaegertracing/jaeger-query
+    networks: *default_networks
+    command:
+      - '--cassandra.keyspace=jaeger'
+      - '--cassandra.servers=cassandra:9042'
+    ports:
+      - 16686:16686
+      - 16687:16687
+    deploy:
+      restart_policy: *default_restart_policy
+
+  jaeger_agent:
+    image: jaegertracing/jaeger-agent
+    networks: *default_networks
+    ports:
+      - 5775:5775/udp
+      - 6831:6831/udp
+      - 6832:6832/udp
+      - 5778:5778
+    command:
+      - '--collector.host-port=192.168.65.3:14267'
+    deploy:
+      restart_policy: *default_restart_policy
+
+  cassandra_schema:
+    image: jaegertracing/jaeger-cassandra-schema
+    networks: *default_networks
+    environment:
+      KEYSPACE: jaeger
+    deploy:
+      restart_policy: *default_restart_policy
+#    depends_on:
+#      database_cassandra:
+#        condition: service_healthy

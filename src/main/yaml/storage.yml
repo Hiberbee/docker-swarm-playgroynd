@@ -1,0 +1,163 @@
+version: '3.8'
+
+networks:
+  service_mesh_ingress:
+    external: true
+#  hostnet:
+#    external: true
+#    name: host
+
+volumes:
+  minio_data: {}
+  user_home:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: 'addr=10.211.44.44,nolock,soft,rw'
+      device: ":/Users/hiberbee"
+#  etc: {}
+#  var: {}
+#
+#secrets:
+#  ceph.monmap:
+#    external: true
+#  ceph.mon.keyring:
+#    external: true
+#  ceph.client.admin.keyring:
+#    external: true
+#  ceph.bootstrap-osd.keyring:
+#    external: true
+#
+#configs:
+#  compat.sh:
+#    file: ../resources/ceph/compat.sh
+#  ceph.conf:
+#    file: ../resources/ceph/etc/ceph.conf
+
+services:
+  minio:
+    image: minio/minio
+    networks:
+      - service_mesh_ingress
+    command: server /data
+    volumes:
+      - minio_data:/data
+      - user_home:/Users/hiberbee
+    environment:
+      MINIO_ACCESS_KEY: accesskey
+      MINIO_SECRET_KEY: secretkey
+    deploy:
+      restart_policy: &default_restart_policy
+        max_attempts: 5
+        delay: '15s'
+        window: '15s'
+        condition: on-failure
+      labels:
+        traefik.enable: 'true'
+        traefik.port: 9000
+        traefik.frontend.rule: 'Host:minio.localhost'
+
+  # docker node ls --format 'table {{.Hostname}}\t{{.ManagerStatus}}'
+
+  #  apt install xfsprogs
+  #  mkfs.xfs -f -i size=2048 /dev/sdX
+  #  echo '/dev/sdX /mnt/osd xfs rw,noatime,inode64 0 0' >> /etc/fstab
+  #  mkdir -p /mnt/osd && mount /mnt/osd
+
+  #  docker run -d --rm --net=host --name ceph_mon -v `pwd`/etc:/etc/ceph -v `pwd`/var:/var/lib/ceph -e NETWORK_AUTO_DETECT=4 -e DEBUG=verbose ceph/daemon mon
+  #  docker exec -it ceph_mon ceph mon getmap -o /etc/ceph/ceph.monmap
+
+  #  docker stop ceph_mon
+#
+#  mon: # to master nodes
+#    image: ceph/daemon
+#    entrypoint: /tmp/compat.sh
+#    command: mon
+#    networks:
+#      hostnet: {}
+#    volumes:
+#      - etc:/etc/ceph
+#      - var:/var/lib/ceph
+#    configs:
+#      - source: compat.sh
+#        target: /tmp/compat.sh
+#        mode: 0755
+#      - source: ceph.conf
+#        target: /etc/ceph/ceph.conf
+#    secrets:
+#      - ceph.monmap
+#      - ceph.mon.keyring
+#      - ceph.client.admin.keyring
+#      - ceph.bootstrap-osd.keyring
+#    environment:
+#      - "NETWORK_AUTO_DETECT=4"
+#    deploy:
+#      mode: global
+#      placement:
+#        constraints:
+#          - node.role == manager
+#
+#  mgr: # one anywhere
+#    image: ceph/daemon
+#    entrypoint: /tmp/compat.sh
+#    command: mgr
+#    #hostname: "{{.Node.Hostname}}"
+#    networks:
+#      hostnet: {}
+#    volumes:
+#      - etc:/etc/ceph
+#      - var:/var/lib/ceph
+#    configs:
+#      - source: compat.sh
+#        target: /tmp/compat.sh
+#        mode: 0755
+#      - source: ceph.conf
+#        target: /etc/ceph/ceph.conf
+#    secrets:
+#      - ceph.client.admin.keyring
+#    # This will add zabbix_sender to mgr
+#    environment:
+#      - ZABBIX=1
+#    deploy:
+#      replicas: 1
+#
+#  osd: # to each node
+#    image: ceph/daemon
+#    entrypoint: /tmp/compat.sh
+#    command: osd
+#    networks:
+#      hostnet: {}
+#    volumes:
+#      - etc:/etc/ceph
+#      - var:/var/lib/ceph
+#      - /mnt/osd:/var/lib/ceph/osd
+#    configs:
+#      - source: compat.sh
+#        target: /tmp/compat.sh
+#        mode: 0755
+#      - source: ceph.conf
+#        target: /etc/ceph/ceph.conf
+#    secrets:
+#      - ceph.bootstrap-osd.keyring
+#    deploy:
+#      mode: global
+#
+#  mds: # two (active/standby) anywhere
+#    image: ceph/daemon
+#    entrypoint: /tmp/compat.sh
+#    command: mds
+#    networks:
+#      hostnet: {}
+#    volumes:
+#      - etc:/etc/ceph
+#      - var:/var/lib/ceph
+#    configs:
+#      - source: compat.sh
+#        target: /tmp/compat.sh
+#        mode: 0755
+#      - source: ceph.conf
+#        target: /etc/ceph/ceph.conf
+#    secrets:
+#      - ceph.client.admin.keyring
+#    deploy:
+#      replicas: 2
